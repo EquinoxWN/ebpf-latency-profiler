@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: the workflow can read the code and nothing else.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Every action is pinned to a full commit SHA.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+          cache-dependency-path: go.mod
+      - run: make ci
+      - name: Known-vulnerability audit
+        run: make audit
+
+  # Real kernel: compile the eBPF programs, check tracepoint layouts, load, attach and read histograms.
+  probes:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+          cache-dependency-path: go.mod
+      - name: Install clang, libbpf headers and bpftool
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends clang llvm libbpf-dev
+          sudo apt-get install -y -q --no-install-recommends "linux-tools-$(uname -r)" \
+            || sudo apt-get install -y -q --no-install-recommends linux-tools-azure
+          tool=$(ls /usr/lib/linux-tools/*/bpftool | sort -V | tail -1)
+          echo "BPFTOOL=$tool" >> "$GITHUB_ENV"
+          "$tool" version
+      - name: Compile eBPF programs and the CLI
+        run: |
+          make bpf build
+          echo "::notice title=bpf object::compiled with $(clang --version | head -1), kernel $(uname -r)"
+      - name: Tracepoint layouts match the runner kernel
+        run: |
+          if out=$(sudo ./bin/ebpf-latency-profiler check-format); then
+            echo "::notice title=check-format::$out"
+          else
+            echo "::error title=check-format::$(echo "$out" | tr '\n' ' ')"
+            exit 1
+          fi
+      - name: Load, attach, run workloads, render histograms
+        run: sudo BPFTOOL="$BPFTOOL" ./scripts/probe-run.sh bin/latency.bpf.o bin/ebpf-latency-profiler .tmp/probe-run
