@@ -20,7 +20,11 @@ trap cleanup EXIT
 mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
 cleanup
 mkdir -p "$PIN" "$OUT/work"
-"$BPFTOOL" prog loadall "$OBJ" "$PIN/progs" pinmaps "$PIN/maps" autoattach
+if ! out=$("$BPFTOOL" prog loadall "$OBJ" "$PIN/progs" pinmaps "$PIN/maps" autoattach 2>&1); then
+  echo "$out"
+  echo "::error title=bpftool prog loadall::$(echo "$out" | tail -n 8 | tr '\n' ' ')"
+  exit 1
+fi
 echo "loaded and attached:"
 ls "$PIN/progs" "$PIN/maps"
 
