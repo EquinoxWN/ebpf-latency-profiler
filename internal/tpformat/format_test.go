@@ -92,6 +92,8 @@ func TestFieldNameForms(t *testing.T) {
 		"const char * name":     "name",
 		"void *skbaddr":         "skbaddr",
 		"unsigned long long ts": "ts",
+		// An unsized array outside __data_loc has no fixed size to read by offset.
+		"char flex[]": "",
 	}
 	for decl, want := range cases {
 		if got := fieldName(decl); got != want {

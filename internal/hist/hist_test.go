@@ -30,7 +30,7 @@ func TestSlotBoundaries(t *testing.T) {
 	cases := []struct {
 		v    uint64
 		slot int
-	}{{0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 2}, {1000, 9}, {1023, 9}, {1024, 10}, {1 << 31, 31}, {1 << 40, 31}}
+	}{{0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 2}, {1000, 9}, {1023, 9}, {1024, 10}, {1 << 31, 31}, {1 << 32, 31}, {1<<33 - 1, 31}, {1 << 40, 31}}
 	for _, c := range cases {
 		if got := SlotFor(c.v); got != c.slot {
 			t.Errorf("SlotFor(%d) = %d, want %d", c.v, got, c.slot)
@@ -73,6 +73,17 @@ func TestAddRejectsBadSlotAndOverflow(t *testing.T) {
 	}
 	if err := h.Add(3, 1); err == nil {
 		t.Fatal("want overflow error")
+	}
+}
+
+func TestMergeReportsOverflow(t *testing.T) {
+	a, b := New("usecs"), New("usecs")
+	if err := a.Add(4, ^uint64(0)); err != nil {
+		t.Fatal(err)
+	}
+	b.Observe(20) // slot 4
+	if err := a.Merge(b); err == nil {
+		t.Fatal("merge into a full slot must fail")
 	}
 }
 

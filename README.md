@@ -15,7 +15,7 @@ kernel's formats, because the author's machine runs Windows:
 
 ![probes, check-format and render on fixture inputs](docs/proof/demo.jpg)
 
-38 Go tests pass, both input parsers survive fuzzing, and govulncheck finds no vulnerabilities in
+40 Go tests pass, both input parsers survive fuzzing, and govulncheck finds no vulnerabilities in
 called code with Go 1.26.10, the version CI uses:
 
 ![go test, fuzzing and govulncheck output](docs/proof/tests.jpg)
@@ -116,31 +116,34 @@ sudo bpftool -j map dump pinned /sys/fs/bpf/elp/maps/runq_hist | ./bin/ebpf-late
 sudo rm -rf /sys/fs/bpf/elp   # detach and free everything
 ```
 
+Environment: `BPFTOOL` (bpftool binary for `make probe-run` and `scripts/probe-run.sh`, default `bpftool`) and `BPF_CLANG` (`make bpf` compiler, default `clang`).
+
 `render` flags: `-probe runqlat|biolatency|fsynclat`, `-in FILE` (default stdin), `-format text|line|json`,
 `-min-count N` (exit 3 if fewer events).
 
 ## Tests and results
 
-38 tests, 0 failures (Go 1.26.10, Windows 11). Full table with every test: [docs/results/m1.md](docs/results/m1.md).
+40 tests, 0 failures (Go 1.26.10, Windows 11). Full table with every test: [docs/results/m1.md](docs/results/m1.md).
+Quality check of the 10 engineering rules, with a mutation test of the core functions: [docs/quality/2026-11-01.md](docs/quality/2026-11-01.md).
 
 | File | Tests | What it proves |
 |---|---|---|
-| `internal/hist/hist_test.go` | 10 | The Go port of the kernel's branch-free log2 matches `math/bits` on 100,014 values; buckets tile the range; percentiles, merge and bcc-style rendering are correct |
-| `internal/bpfdump/dump_test.go` | 8 | bpftool JSON dumps (per-CPU and plain) are summed correctly; malformed, oversized and overflowing input is rejected; round trip on 1 to 64 CPUs; fuzz seed corpus |
+| `internal/hist/hist_test.go` | 11 | The Go port of the kernel's branch-free log2 matches `math/bits` on 100,014 values; buckets tile the range; percentiles, merge (including overflow) and bcc-style rendering are correct |
+| `internal/bpfdump/dump_test.go` | 9 | bpftool JSON dumps (per-CPU and plain) are summed correctly; malformed, oversized, overflowing and too-many-CPU input is rejected; round trip on 1 to 64 CPUs; fuzz seed corpus |
 | `internal/tpformat/format_test.go` | 7 | tracefs format files parse (arrays, `__data_loc`); moved, resized and missing fields are reported; malformed files rejected; fuzz seed corpus |
 | `internal/probes/catalog_test.go` | 7 | The Go catalog and `latency.bpf.c` agree on every `SEC()`, map, `MAX_SLOTS` and `FIELD_ASSERT` offset; layout changes are detected |
 | `internal/cli/cli_test.go` | 6 | `render`, `check-format` and `probes` end to end, including exit codes for every error path |
 
 Headline results:
 
-- Fuzzing: 74,623 dump-parser inputs and 172,180 format-parser inputs in 15 s each, 0 crashes.
+- Fuzzing (re-run 2026-11-01): 539,682 dump-parser inputs and 851,728 format-parser inputs in 15 s each, 0 crashes.
 - `go vet` (windows and linux), `gofmt`: clean. govulncheck v1.8.0: no vulnerabilities in called code.
 - Kernel side: compiled, layout-checked, loaded and run **in CI only**; per-probe event counts and
   p50/p99 bucket bounds are in the CI run's `::notice` annotations. Overhead is not measured yet (M3).
 
 ```mermaid
 mindmap
-  root((38 tests pass))
+  root((40 tests pass))
     Histogram model
       log2 matches math/bits
       buckets tile the range

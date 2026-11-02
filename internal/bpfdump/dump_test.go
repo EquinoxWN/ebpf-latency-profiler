@@ -57,6 +57,7 @@ func TestParseRejectsMalformed(t *testing.T) {
 		"short key":      `[{"key":["0x00"],"value":` + u64 + `}]`,
 		"slot too big":   `[{"key":["0x20","0x00","0x00","0x00"],"value":` + u64 + `}]`,
 		"bad hex":        `[{"key":["0xzz","0x00","0x00","0x00"],"value":` + u64 + `}]`,
+		"short byte":     `[{"key":["0x0","0x00","0x00","0x00"],"value":` + u64 + `}]`,
 		"no prefix":      `[{"key":["00","0x00","0x00","0x00"],"value":` + u64 + `}]`,
 		"short value":    `[{"key":["0x00","0x00","0x00","0x00"],"value":["0x01"]}]`,
 		"no value":       `[{"key":["0x00","0x00","0x00","0x00"]}]`,
@@ -82,6 +83,15 @@ func TestPerCPUOverflowDetected(t *testing.T) {
 	in := `[{"key":["0x00","0x00","0x00","0x00"],"values":[{"cpu":0,"value":` + max + `},{"cpu":1,"value":` + max + `}]}]`
 	if _, err := Parse(strings.NewReader(in), "usecs"); !errors.Is(err, ErrFormat) {
 		t.Fatalf("want overflow error, got %v", err)
+	}
+}
+
+func TestTooManyCPUValuesRejected(t *testing.T) {
+	zero := `{"cpu":0,"value":["0x00","0x00","0x00","0x00","0x00","0x00","0x00","0x00"]}`
+	vals := strings.TrimSuffix(strings.Repeat(zero+",", maxCPUs+1), ",")
+	in := `[{"key":["0x00","0x00","0x00","0x00"],"values":[` + vals + `]}]`
+	if _, err := Parse(strings.NewReader(in), "usecs"); !errors.Is(err, ErrFormat) {
+		t.Fatalf("want ErrFormat for %d CPU values, got %v", maxCPUs+1, err)
 	}
 }
 
